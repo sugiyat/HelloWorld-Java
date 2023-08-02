@@ -4,6 +4,9 @@ import java.util.List;
 
 import javax.servlet.http.HttpSession;
 
+import com.intuit.ipp.core.IEntity;
+import com.intuit.ipp.data.Bill;
+import com.intuit.ipp.data.Line;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 import org.json.JSONObject;
@@ -27,7 +30,7 @@ import com.intuit.oauth2.data.BearerTokenResponse;
 import com.intuit.oauth2.exception.OAuthException;
 
 /**
- * @author dderose
+ * @author dderose, sugiyat
  *
  */
 @Controller
@@ -42,97 +45,81 @@ public class QBOController {
 	
 	private static final Logger logger = Logger.getLogger(QBOController.class);
 	private static final String failureMsg="Failed";
-	
-	
-	/**
-     * Sample QBO API call using OAuth2 tokens
-     * 
-     * @param session
-     * @return
-     */
+
 	@ResponseBody
-    @RequestMapping("/getCompanyInfo")
-    public String callQBOCompanyInfo(HttpSession session) {
+	@RequestMapping("/getBills")
+	public String callQBOBills(HttpSession session) {
+		String realmId = (String) session.getAttribute("realmId");
+		if (StringUtils.isEmpty(realmId))
+			return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
 
-    	String realmId = (String)session.getAttribute("realmId");
-    	if (StringUtils.isEmpty(realmId)) {
-    		return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
-    	}
-    	String accessToken = (String)session.getAttribute("access_token");
-    	
-        try {
-        	
-        	
-        	//get DataService
-    		DataService service = helper.getDataService(realmId, accessToken);
-			
-			// get all companyinfo
-			String sql = "select * from companyinfo";
+		String accessToken = (String) session.getAttribute("access_token");
+
+		try {
+			// get DataService
+			DataService service = helper.getDataService(realmId, accessToken);
+
+			// get all the bills
+			String sql = "select * from bill";
 			QueryResult queryResult = service.executeQuery(sql);
-			return processResponse(failureMsg, queryResult);
-			
-		}
-	        /*
-	         * Handle 401 status code - 
-	         * If a 401 response is received, refresh tokens should be used to get a new access token,
-	         * and the API call should be tried again.
-	         */
-	        catch (InvalidTokenException e) {			
-				logger.error("Error while calling executeQuery :: " + e.getMessage());
-				
-				//refresh tokens
-	        	logger.info("received 401 during companyinfo call, refreshing tokens now");
-	        	OAuth2PlatformClient client  = factory.getOAuth2PlatformClient();
-	        	String refreshToken = (String)session.getAttribute("refresh_token");
-	        	
-				try {
-					BearerTokenResponse bearerTokenResponse = client.refreshToken(refreshToken);
-					session.setAttribute("access_token", bearerTokenResponse.getAccessToken());
-		            session.setAttribute("refresh_token", bearerTokenResponse.getRefreshToken());
-		            
-		            //call company info again using new tokens
-		            logger.info("calling companyinfo using new tokens");
-		            DataService service = helper.getDataService(realmId, accessToken);
-					
-					// get all companyinfo
-					String sql = "select * from companyinfo";
-					QueryResult queryResult = service.executeQuery(sql);
-					return processResponse(failureMsg, queryResult);
-					
-				} catch (OAuthException e1) {
-					logger.error("Error while calling bearer token :: " + e.getMessage());
-					return new JSONObject().put("response",failureMsg).toString();
-				} catch (FMSException e1) {
-					logger.error("Error while calling company currency :: " + e.getMessage());
-					return new JSONObject().put("response",failureMsg).toString();
-				}
-	            
-			} catch (FMSException e) {
-				List<Error> list = e.getErrorList();
-				list.forEach(error -> logger.error("Error while calling executeQuery :: " + error.getMessage()));
-				return new JSONObject().put("response",failureMsg).toString();
-			}
-		
-    }
+			logger.info(queryResult.toString());
+			return processGetBills(failureMsg, queryResult);
+		} catch (InvalidTokenException e) {
+			/*
+			 * Handle 401 status code -
+			 * If a 401 response is received, refresh tokens should be used to get a new access token,
+			 * and the API call should be tried again.
+			 */
+			logger.error("Error while calling executeQuery :: " + e.getMessage());
 
-	private String processResponse(String failureMsg, QueryResult queryResult) {
-		if (!queryResult.getEntities().isEmpty() && queryResult.getEntities().size() > 0) {
-			CompanyInfo companyInfo = (CompanyInfo) queryResult.getEntities().get(0);
-			logger.info("Companyinfo -> CompanyName: " + companyInfo.getCompanyName());
-			ObjectMapper mapper = new ObjectMapper();
+			// refresh tokens
+			logger.info("received 401 during bill call, refreshing tokens now");
+			OAuth2PlatformClient client  = factory.getOAuth2PlatformClient();
+			String refreshToken = (String)session.getAttribute("refresh_token");
+
 			try {
-				String jsonInString = mapper.writeValueAsString(companyInfo);
-				return jsonInString;
-			} catch (JsonProcessingException e) {
-				logger.error("Exception while getting company info ", e);
+				BearerTokenResponse bearerTokenResponse = client.refreshToken(refreshToken);
+				session.setAttribute("access_token", bearerTokenResponse.getAccessToken());
+				session.setAttribute("refresh_token", bearerTokenResponse.getRefreshToken());
+
+				// use new tokens to get all bills
+				logger.info("calling bill using new tokens");
+				DataService service = helper.getDataService(realmId, accessToken);
+
+				String sql = "select * from bill";
+				QueryResult queryResult = service.executeQuery(sql);
+				return processGetBills(failureMsg, queryResult);
+			} catch (OAuthException e1) {
+				logger.error("Error while calling bearer token :: " + e.getMessage());
+				return new JSONObject().put("response",failureMsg).toString();
+			} catch (FMSException e1) {
+				logger.error("Error while calling bill currency :: " + e.getMessage());
 				return new JSONObject().put("response",failureMsg).toString();
 			}
-			
+		} catch (FMSException e) {
+			List<Error> list = e.getErrorList();
+			list.forEach(error -> logger.error("Error while calling executeQuery :: " + error.getMessage()));
+			return new JSONObject().put("response",failureMsg).toString();
 		}
-		return failureMsg;
 	}
 
+	// TODO: Create a bill type to parse and manage data
+	private String processGetBills(String failureMsg, QueryResult queryResult) {
+		String billData = "";
+		for (Bill bill : (List<Bill>) queryResult.getEntities()) {
+			billData += "> " + bill.getDocNumber() + "\n";
+			billData += "--- Vendor: " + bill.getVendorRef().getName() + "\n";
+			billData += "--- Due Date: " + bill.getDueDate() + "\n";
+			billData += "--- Bill Date: " + bill.getTxnDate() + "\n";
+			billData += "--- Total Amount: " + bill.getTotalAmt() + "\n";
+			billData += "--- Details: \n";
+			for (Line line : bill.getLine()) {
+				billData += "---> Description: " + line.getDescription() + "\n";
+				billData += "------ Amount: " + line.getAmount() + "\n";
+			}
+			billData += "\n";
+		}
+		return billData;
+	}
 
-
-    
 }
