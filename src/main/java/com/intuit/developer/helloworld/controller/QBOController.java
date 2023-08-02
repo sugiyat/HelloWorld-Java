@@ -91,15 +91,15 @@ public class QBOController {
 				return processGetBills(failureMsg, queryResult);
 			} catch (OAuthException e1) {
 				logger.error("Error while calling bearer token :: " + e.getMessage());
-				return new JSONObject().put("response",failureMsg).toString();
+				return new JSONObject().put("response", failureMsg).toString();
 			} catch (FMSException e1) {
 				logger.error("Error while calling bill currency :: " + e.getMessage());
-				return new JSONObject().put("response",failureMsg).toString();
+				return new JSONObject().put("response", failureMsg).toString();
 			}
 		} catch (FMSException e) {
 			List<Error> list = e.getErrorList();
 			list.forEach(error -> logger.error("Error while calling executeQuery :: " + error.getMessage()));
-			return new JSONObject().put("response",failureMsg).toString();
+			return new JSONObject().put("response", failureMsg).toString();
 		}
 	}
 
