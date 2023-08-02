@@ -24,7 +24,8 @@ public class OAuth2PlatformClientFactory {
 
 	OAuth2PlatformClient client;
 	OAuth2Config oauth2Config;
-	
+
+	//TODO: Change to Production
 	@PostConstruct
 	public void init() {
 		//initialize the config

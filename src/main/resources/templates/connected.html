@@ -16,6 +16,13 @@
         $("#result").html(data)
       })
     }
+
+    function getPurchaseOrders() {
+      $("#result").html('Loading...')
+      $.get("/getPurchaseOrders", function(data) {
+        $("#result").html(data)
+      })
+    }
   </script>
 </head>
 <body>
@@ -24,6 +31,7 @@
   
   <div>
     <button onclick="getBills()">Get QuickBooks Bills</button>
+    <button onclick="getPurchaseOrders()">Get Purchase Orders</button>
     <br /><br />
     <div><code id="result"></code></div>
     </div>
